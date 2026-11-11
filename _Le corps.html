@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Chrono Évolutif - Le corps</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; text-align: center; background: #f0f2f5; padding: 40px 20px; color: #333; }
+        .quiz-container { background: white; padding: 40px; border-radius: 12px; max-width: 650px; margin: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+        .progress { font-size: 14px; color: #666; font-weight: bold; margin-bottom: 10px; }
+        h2 { font-size: 24px; color: #2c3e50; min-height: 68px; margin-bottom: 10px; }
+        #timer { font-size: 28px; font-weight: bold; color: #e74c3c; margin: 10px 0; background: #fde8e7; display: inline-block; padding: 5px 20px; border-radius: 20px; }
+        .indicators-container { display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; font-weight: bold; font-size: 16px; line-height: 1.4; }
+        #points-indicator { color: #27ae60; }
+        #penalty-indicator { color: #c0392b; }
+        .answers-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 20px; }
+        .btn-answer { display: block; width: 100%; padding: 16px; font-size: 16px; font-weight: 600; border: 2px solid #3498db; border-radius: 8px; cursor: pointer; background: white; color: #3498db; transition: all 0.2s ease; }
+        .btn-answer:hover { background: #3498db; color: white; }
+        .btn-answer.hidden { visibility: hidden; pointer-events: none; }
+        #quiz-screen { display: none; }
+        .btn-action { padding: 15px 30px; font-size: 18px; border-radius: 6px; cursor: pointer; font-weight: bold; border: none; margin-top: 10px; text-transform: uppercase; }
+        .btn-start { background: #3498db; color: white; }
+        .input-group { margin: 20px 0 10px 0; }
+        .input-name { padding: 12px; font-size: 16px; width: 80%; max-width: 300px; border: 2px solid #ccc; border-radius: 6px; text-align: center; }
+        .input-name:focus { border-color: #3498db; outline: none; }
+        .leaderboard-section { margin-top: 35px; border-top: 2px dashed #e0e0e0; padding-top: 20px; }
+        .results-table { width: 100%; max-width: 640px; margin: 15px auto 0 auto; border-collapse: collapse; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; table-layout: fixed; }
+        .results-table th, .results-table td { padding: 8px 4px; text-align: center; border: 1px solid #dddddd; }
+        .results-table th { background-color: #2c3e50; color: white; font-weight: 600; font-size: 10px; line-height: 1.2; white-space: normal; padding: 7px 3px; }
+        .results-table td { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .col-joueur { width: 26%; }
+        .col-stat { width: 24%; }
+        .col-score { width: 26%; }
+        .results-table tr:nth-child(even) { background-color: #f8f9fa; }
+        .results-table tr { border-bottom: 1px solid #dddddd; }
+        .text-success { color: #27ae60; font-weight: bold; }
+        .text-danger { color: #c0392b; font-weight: bold; }
+        .current-player-row { background-color: #e8f4fd !important; font-weight: bold; }
+        .reference-row { background-color: #fff3cd !important; font-weight: bold; }
+        .secret-trigger { pointer-events: auto; cursor: pointer; user-select: none; }
+    </style>
+</head>
+<body>
+
+<div class="quiz-container">
+    <div id="start-screen">
+        <h2>Thème : Le corps !</h2>
+        <div class="input-group">
+            <input type="text" id="player-name" class="input-name" placeholder="Entrez votre nom / pseudo" autocomplete="off">
+        </div>
+        <button class="btn-action btn-start" onclick="validateAndStart()">Démarrer le jeu</button>
+
+        <div class="leaderboard-section">
+            <h2 class="secret-trigger" onclick="handleSecretClick()">Classement Général</h2>
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th class="col-joueur">Joueur</th>
+                        <th class="col-stat">Bonnes<br>réponses</th>
+                        <th class="col-stat">Mauvaises<br>réponses</th>
+                        <th class="col-score">Score</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="quiz-screen">
+        <audio id="quiz-audio" preload="auto"></audio>
+        <div class="progress" id="progress">Question 1</div>
+        <h2 id="question-text">Chargement de la question...</h2>
+        <div id="timer">30s</div>
+        <div class="indicators-container">
+            <div id="points-indicator">Si juste :<br>+600 pts</div>
+            <div id="penalty-indicator">Si faux :<br>-90 pts</div>
+        </div>
+        <div class="answers-grid" id="answers-container"></div>
+    </div>
+</div>
+
+<script>
+    const myQuestions = new Array(
+        {
+            question: "1 - Qui chante sur ce titre ?",
+            audioSrc: "Julien Clerc.mp3",
+            answers: new Array(
+                { text: "Julien Clerc", isCorrect: true },
+                { text: "Michel Delpech", isCorrect: false },
+                { text: "Maxime Le Forestier", isCorrect: false },
+                { text: "Alain Souchon", isCorrect: false }
+            )
+        },
+{
+            question: "2 - Qui chante sur ce titre ?",
+            audioSrc: "Mariah Carey.mp3",
+            answers: new Array(
+                { text: "Mariah Carey", isCorrect: true },
+                { text: "Whitney Houston", isCorrect: false },
+                { text: "Janet Jackson", isCorrect: false },
+                { text: "Toni Braxton", isCorrect: false }
+            )
+        },
+{
+            question: "3 - Qui chante sur ce titre ?",
+            audioSrc: "Emma Louise.mp3",
+            answers: new Array(
+                { text: "Emma Louise", isCorrect: true },
+                { text: "Birdy", isCorrect: false },
+                { text: "London Grammar", isCorrect: false },
+                { text: "Vera Blue", isCorrect: false }
+            )
+        },
+{
+            question: "4 - Qui chante sur ce titre ?",
+            audioSrc: "Yes.mp3",
+            answers: new Array(
+                { text: "Yes", isCorrect: true },
+                { text: "Police", isCorrect: false },
+                { text: "Toto", isCorrect: false },
+                { text: "Genesis", isCorrect: false }
+            )
+        },
+{
+            question: "5 - Qui chante sur ce titre ?",
+            audioSrc: "2 Pac.mp3",
+            answers: new Array(
+                { text: "2 Pac", isCorrect: true },
+                { text: "Ice Cube", isCorrect: false },
+                { text: "Snoop Dog", isCorrect: false },
+                { text: "The Notorious B.I.G.", isCorrect: false }
+            )
+        },
+{
+            question: "6 - Qui chante sur ce titre ?",
+            audioSrc: "Salvatore Adamo.mp3",
+            answers: new Array(
+                { text: "Salvatore Adamo", isCorrect: true },
+                { text: "Hervé Villard", isCorrect: false },
+                { text: "Frédéric François", isCorrect: false },
+                { text: "Claude Barzotti", isCorrect: false }
+            )
+        },
+{
+            question: "7 - Quel est le titre de cette chanson ?",
+            audioSrc: "Mylene Farmer.mp3",
+            answers: new Array(
+                { text: "Que mon coeur lache", isCorrect: true },
+                { text: "Que mon coeur saigne", isCorrect: false },
+                { text: "Que mon coeur batte", isCorrect: false },
+                { text: "Que mon coeur parle", isCorrect: false }
+            )
+        },
+{
+            question: "8 - Qui chante sur ce titre ?",
+            audioSrc: "Basement Jaxx.mp3",
+            answers: new Array(
+                { text: "Basement Jaxx", isCorrect: true },
+                { text: "Groove Armada", isCorrect: false },
+                { text: "The Chemical Brothers", isCorrect: false },
+                { text: "Fatboy Slim", isCorrect: false }
+            )
+        },
+{
+            question: "9 - Qui chante cette version ?",
+            audioSrc: "Michel Berger.mp3",
+            answers: new Array(
+                { text: "Michel Berger", isCorrect: true },
+                { text: "Johnny Hallyday", isCorrect: false },
+                { text: "France Gall", isCorrect: false },
+                { text: "Véronique Sanson", isCorrect: false }
+            )
+        },
+{
+            question: "10 - Qui chante sur ce titre ?",
+            audioSrc: "Ben Harper.mp3",
+            answers: new Array(
+                { text: "Ben Harper", isCorrect: true },
+                { text: "Jimmy Cliff", isCorrect: false },
+                { text: "Bob Marley", isCorrect: false },
+                { text: "Lenny Kravitz", isCorrect: false }
+            )
+        },
+{
+            question: "11 - Qui chante sur ce titre ?",
+            audioSrc: "Taio Cruz.mp3",
+            answers: new Array(
+                { text: "Taio Cruz", isCorrect: true },
+                { text: "Jason Derulo", isCorrect: false },
+                { text: "Ne-Yo", isCorrect: false },
+                { text: "Jay Sean", isCorrect: false }
+            )
+        },
+{
+            question: "12 - Qui chante sur ce titre ?",
+            audioSrc: "20 fingers.mp3",
+            answers: new Array(
+                { text: "20 fingers", isCorrect: true },
+                { text: "La bouche", isCorrect: false },
+                { text: "Reel 2 Real", isCorrect: false },
+                { text: "C+C Music Factory", isCorrect: false }
+            )
+        },
+        {
+            question: "13 - Quel est le titre de cette chanson ?",
+            audioSrc: "La Femme à la Peau Bleue.mp3",
+            answers: new Array(
+                { text: "La femme à la peau bleue", isCorrect: true },
+                { text: "La femme à la peau verte", isCorrect: false },
+                { text: "La femme à la peau orange", isCorrect: false },
+                { text: "La femme à la peau jaune", isCorrect: false }
+            )
+        },
+        {
+            question: "14 - Qui chante sur ce titre ?",
+            audioSrc: "Danzel.mp3",
+            answers: new Array(
+                { text: "Danzel", isCorrect: true },
+                { text: "Basshunter", isCorrect: false },
+                { text: "Bob Sinclar", isCorrect: false },
+                { text: "Eric Prydz", isCorrect: false }
+            )
+        }
+    );
+
+    const REFERENCE_SCORE = {
+        id: 'ref-LIGATEAM',
+        name: "LIGATEAM",
+        correct: 10,
+        wrong: 4,
+        score: 4854,
+        isReference: true
+    };
+
+    const STORAGE_KEY = 'quizLeaderboard_Le corps';
+    let playerName = "";
+    let currentQuestionIndex = 0;
+    let totalScore = 0;
+    let correctAnswersCount = 0;
+    let wrongAnswersCount = 0;
+    let seconds = 30;
+    let currentQuestionValue = 600;
+    let currentPenaltyValue = -90;
+    let timerInterval = null;
+    let wrongAnswersElements = new Array();
+    let secretClickCount = 0;
+    let isGameActive = false;
+    const SECRET_PASSWORD = "admin123";
+
+    window.onload = function() {
+        showLeaderboardData(null);
+    };
+
+    window.onbeforeunload = function() {
+        if (isGameActive && playerName !== "") {
+            isGameActive = false;
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY)) || new Array();
+            history.push({
+                id: Date.now(),
+                name: playerName + " (Abandon)",
+                correct: correctAnswersCount,
+                wrong: wrongAnswersCount,
+                score: totalScore
+            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        }
+    };
+
+    function validateAndStart() {
+        const nameInput = document.getElementById('player-name').value.trim();
+        if (nameInput === "") {
+            alert("Veuillez renseigner votre nom avant de commencer la partie.");
+            return;
+        }
+        playerName = nameInput;
+        startGame();
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('quiz-screen').style.display = 'block';
+        currentQuestionIndex = 0;
+        totalScore = 0;
+        correctAnswersCount = 0;
+        wrongAnswersCount = 0;
+        secretClickCount = 0;
+        isGameActive = true;
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        clearInterval(timerInterval);
+        seconds = 30;
+        currentQuestionValue = 600;
+        currentPenaltyValue = -90;
+        document.getElementById('timer').innerText = "30s";
+        updateDisplays();
+
+        if (currentQuestionIndex >= myQuestions.length) {
+            saveGameAndEnd();
+            return;
+        }
+
+        const currentQuestion = myQuestions.slice(currentQuestionIndex, currentQuestionIndex + 1).shift();
+        const audio = document.getElementById('quiz-audio');
+        if (audio && currentQuestion.audioSrc) {
+            audio.src = currentQuestion.audioSrc;
+            audio.currentTime = 0;
+            audio.play().catch(function(error) {
+                console.log("Lecture audio bloquée ou absente :", error);
+            });
+        }
+
+        document.getElementById('progress').innerText = "Question " + (currentQuestionIndex + 1) + " / " + myQuestions.length;
+        document.getElementById('question-text').innerText = currentQuestion.question;
+
+        const container = document.getElementById('answers-container');
+        container.innerHTML = '';
+        wrongAnswersElements = new Array();
+
+        const shuffledAnswers = currentQuestion.answers.slice().sort(function() {
+            return 0.5 - Math.random();
+        });
+
+        shuffledAnswers.forEach(function(answer) {
+            const button = document.createElement('button');
+            button.className = 'btn-answer';
+            button.innerText = answer.text;
+            if (answer.isCorrect) {
+                button.setAttribute('data-correct', 'true');
+            } else {
+                wrongAnswersElements.push(button);
+            }
+            button.onclick = function() {
+                handleAnswer(button, answer.isCorrect, false);
+            };
+            container.appendChild(button);
+        });
+
+        timerInterval = setInterval(function() {
+            seconds--;
+            let elapsedSeconds = 30 - seconds;
+            currentQuestionValue = Math.max(300, 600 - (elapsedSeconds * 10));
+            currentPenaltyValue = Math.min(-30, -90 + (elapsedSeconds * 2));
+            document.getElementById('timer').innerText = seconds + "s";
+            updateDisplays();
+
+            if (elapsedSeconds === 11 && wrongAnswersElements.length > 0) {
+                removeRandomWrongAnswer();
+            }
+            if (elapsedSeconds === 22 && wrongAnswersElements.length > 0) {
+                removeRandomWrongAnswer();
+            }
+            if (seconds <= 0) {
+clearInterval(timerInterval);
+handleAnswer(null, false, true);
+}
+}, 1000);
+}
+function removeRandomWrongAnswer() {
+const randomIndex = Math.floor(Math.random() * wrongAnswersElements.length);
+const removedButton = wrongAnswersElements.splice(randomIndex, 1).shift();
+if (removedButton) {
+removedButton.classList.add('hidden');
+}
+}
+function updateDisplays() {
+const br = "<" + "br>";
+document.getElementById('points-indicator').innerHTML = "Si juste :" + br + "+" + currentQuestionValue + " pts";
+document.getElementById('penalty-indicator').innerHTML = "Si faux :" + br + currentPenaltyValue + " pts";
+}
+function handleAnswer(selectedButton, isCorrect, isTimeOut) {
+clearInterval(timerInterval);
+const audio = document.getElementById('quiz-audio');
+if (audio) {
+try { audio.pause(); } catch(e) {}
+}
+if (isTimeOut) {
+totalScore += -100;
+wrongAnswersCount++;
+} else if (isCorrect) {
+totalScore += currentQuestionValue;
+correctAnswersCount++;
+if (selectedButton) selectedButton.style.background = "#2ecc71";
+} else {
+totalScore += currentPenaltyValue;
+wrongAnswersCount++;
+if (selectedButton) selectedButton.style.background = "#e74c3c";
+}
+const buttons = document.querySelectorAll('.btn-answer');
+buttons.forEach(function(btn) {
+btn.disabled = true;
+if (btn.getAttribute('data-correct') === 'true') {
+btn.style.background = "#2ecc71";
+btn.style.color = "white";
+}
+});
+setTimeout(function() {
+currentQuestionIndex++;
+loadQuestion();
+}, 2000);
+}
+function saveGameAndEnd() {
+isGameActive = false;
+let history = JSON.parse(localStorage.getItem(STORAGE_KEY)) || new Array();
+const currentGameData = {
+id: Date.now(),
+name: playerName,
+correct: correctAnswersCount,
+wrong: wrongAnswersCount,
+score: totalScore
+};
+history.push(currentGameData);
+localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+document.getElementById('player-name').value = "";
+document.getElementById('quiz-screen').style.display = 'none';
+document.getElementById('start-screen').style.display = 'block';
+showLeaderboardData(currentGameData.id);
+}
+function showLeaderboardData(activeId) {
+let history = JSON.parse(localStorage.getItem(STORAGE_KEY)) || new Array();
+let allScores = new Array(REFERENCE_SCORE).concat(history);
+allScores.sort(function(a, b) { return b.score - a.score; });
+const tbody = document.getElementById('leaderboard-body');
+tbody.innerHTML = "";
+allScores.forEach(function(player) {
+const row = tbody.insertRow();
+if (player.isReference) {
+row.className = "reference-row";
+} else if (activeId && player.id === activeId) {
+row.className = "current-player-row";
+}
+const cellNom = row.insertCell(0);
+const cellCorrect = row.insertCell(1);
+const cellWrong = row.insertCell(2);
+const cellScore = row.insertCell(3);
+cellNom.innerText = player.name;
+cellCorrect.innerText = player.correct;
+cellCorrect.className = "text-success";
+cellWrong.innerText = player.wrong;
+cellWrong.className = "text-danger";
+cellScore.innerText = player.score + " pts";
+cellScore.style.fontWeight = "bold";
+cellScore.style.color = player.isReference ? "#d35400" : "#2ecc71";
+});
+}
+function handleSecretClick() {
+secretClickCount++;
+if (secretClickCount === 5) {
+secretClickCount = 0;
+const passwordInput = prompt("Entrez le mot de passe administrateur pour réinitialiser les scores :");
+if (passwordInput === SECRET_PASSWORD) {
+localStorage.removeItem(STORAGE_KEY);
+showLeaderboardData(null);
+alert("Historique des scores effacé !");
+} else if (passwordInput !== null) {
+alert("Mot de passe incorrect.");
+}
+}
+}
+</script>
+</body>
+</html>
